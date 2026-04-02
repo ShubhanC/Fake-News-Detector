@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Fake News Detector (English)</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+    .card {
+      background: #1e293b;
+      border-radius: 1rem;
+      padding: 2.5rem;
+      max-width: 640px;
+      width: 100%;
+      box-shadow: 0 25px 50px rgba(0,0,0,0.4);
+    }
+    h1 { font-size: 1.75rem; margin-bottom: 0.5rem; }
+    p.subtitle { color: #94a3b8; margin-bottom: 2rem; font-size: 0.95rem; }
+
+    .tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; }
+    .tab {
+      flex: 1; padding: 0.6rem; border: 1px solid #334155;
+      border-radius: 0.5rem; background: transparent;
+      color: #94a3b8; cursor: pointer; font-size: 0.9rem; transition: all 0.2s;
+    }
+    .tab.active { background: #3b82f6; border-color: #3b82f6; color: white; }
+
+    .input-group { display: flex; flex-direction: column; gap: 0.75rem; }
+    input, textarea {
+      background: #0f172a; border: 1px solid #334155;
+      color: #e2e8f0; border-radius: 0.5rem; padding: 0.75rem 1rem;
+      font-size: 0.95rem; width: 100%; outline: none;
+      transition: border-color 0.2s;
+    }
+    input:focus, textarea:focus { border-color: #3b82f6; }
+    textarea { resize: vertical; min-height: 160px; font-family: inherit; }
+
+    button.submit {
+      background: #3b82f6; color: white; border: none;
+      border-radius: 0.5rem; padding: 0.75rem;
+      font-size: 1rem; cursor: pointer; width: 100%;
+      transition: background 0.2s; margin-top: 0.25rem;
+    }
+    button.submit:hover { background: #2563eb; }
+    button.submit:disabled { background: #334155; cursor: not-allowed; }
+
+    .result {
+      margin-top: 1.5rem; padding: 1.25rem;
+      border-radius: 0.75rem; display: none;
+      animation: fadeIn 0.3s ease;
+    }
+    .result.fake { background: #450a0a; border: 1px solid #dc2626; }
+    .result.real { background: #052e16; border: 1px solid #16a34a; }
+    .result .label {
+      font-size: 1.4rem; font-weight: 700; margin-bottom: 0.25rem;
+    }
+    .result.fake .label { color: #f87171; }
+    .result.real .label { color: #4ade80; }
+    .result .confidence { font-size: 0.875rem; color: #94a3b8; }
+
+    .error {
+      margin-top: 1rem; color: #f87171; font-size: 0.875rem;
+      background: #450a0a; padding: 0.75rem 1rem;
+      border-radius: 0.5rem; display: none;
+    }
+
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; } }
+  </style>
+</head>
+<body>
+<div class="card">
+  <h1>🔍 Fake News Detector</h1>
+  <p class="subtitle">Paste an article URL or raw text to check if it's real or fake.</p>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('url')">🌐 Article URL</button>
+    <button class="tab" onclick="switchTab('text')">📝 Raw Text</button>
+  </div>
+
+  <div class="input-group">
+    <div id="url-input">
+      <input type="url" id="urlField" placeholder="https://example.com/article" />
+    </div>
+    <div id="text-input" style="display:none;">
+      <textarea id="textField" placeholder="Paste article text here (minimum 200 characters)..."></textarea>
+    </div>
+    <button class="submit" id="submitBtn" onclick="analyze()">Analyze</button>
+  </div>
+
+  <div class="error" id="errorBox"></div>
+  <div class="result" id="resultBox">
+    <div class="label" id="resultLabel"></div>
+    <div class="confidence" id="resultConfidence"></div>
+  </div>
+</div>
+
+<script>
+  let activeTab = "url";
+
+  function switchTab(tab) {
+    activeTab = tab;
+    document.querySelectorAll(".tab").forEach((t, i) => {
+      t.classList.toggle("active", (i === 0 && tab === "url") || (i === 1 && tab === "text"));
+    });
+    document.getElementById("url-input").style.display = tab === "url" ? "block" : "none";
+    document.getElementById("text-input").style.display = tab === "text" ? "block" : "none";
+    document.getElementById("resultBox").style.display = "none";
+    document.getElementById("errorBox").style.display = "none";
+  }
+
+  async function analyze() {
+    const btn = document.getElementById("submitBtn");
+    const resultBox = document.getElementById("resultBox");
+    const errorBox = document.getElementById("errorBox");
+    resultBox.style.display = "none";
+    errorBox.style.display = "none";
+    btn.disabled = true;
+    btn.textContent = "Analyzing...";
+
+    try {
+      let endpoint, body;
+      if (activeTab === "url") {
+        const url = document.getElementById("urlField").value.trim();
+        if (!url) throw new Error("Please enter a URL.");
+        endpoint = "/api/predict/url";
+        body = { url };
+      } else {
+        const text = document.getElementById("textField").value.trim();
+        if (text.length < 20) throw new Error("Please enter more text.");
+        endpoint = "/api/predict/text";
+        body = { text };
+      }
+
+        const res = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+        });
+
+        // Read as text first, then try to parse as JSON
+        const rawText = await res.text();
+        let data;
+        try {
+            data = JSON.parse(rawText);
+        } catch {
+            // Show the raw response so you can debug
+            throw new Error(`Server error: ${rawText.slice(0, 200)}`);
+        }
+
+        if (!res.ok) throw new Error(data.detail || "Something went wrong.");
+
+      const isFake = data.prediction === "FAKE";
+      resultBox.className = `result ${isFake ? "fake" : "real"}`;
+      document.getElementById("resultLabel").textContent = isFake ? "⚠️ Likely Fake" : "✅ Likely Real";
+      document.getElementById("resultConfidence").textContent =
+        data.confidence != null ? `Confidence: ${data.confidence}%` : "";
+      resultBox.style.display = "block";
+
+    } catch (err) {
+      errorBox.textContent = err.message;
+      errorBox.style.display = "block";
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Analyze";
+    }
+  }
+</script>
+</body>
+</html>

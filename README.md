@@ -1,9 +1,11 @@
 # Fake-News-Detector
+
+[Test out the model at this link.](https://fake-news-detector-sc.vercel.app)
+
 Learning basics of Deep Learning with TF-IDF and Fake News Detection. Original project at https://data-flair.training/blogs/advanced-python-project-detecting-fake-news/, but will do some fun twists.
 
 ## Goals
 Overall: The goal is to have different types of models that will predict whether a post, article, or other text is considered fake news or not. I will try to split each article into a different topic (currently within political atmospheres, will hopefully spread to non-political news as well). Goal is to predict with >95% accuracy, and reduce the number of false negatives that exist (aka. classifying text as real when it is actually fake).
-
 
 1. Create a Fake News classifier by implementing basic NLP preprocessing techniques (such as vectorization) and training on an SGD-augmented linear model. Should be applicable to any news article. Slight performance tuning adjustments to prioritize FPs/FNs may need to be done. - in progress in [model.ipynb](https://github.com/ShubhanC/Fake-News-Detector/blob/main/model/model.ipynb)
 2. Create a web scraping pipeline where if someone puts in an article link, then it will extract the article and print out the inference
@@ -12,7 +14,12 @@ Overall: The goal is to have different types of models that will predict whether
 
 The goal is to have different types of models that will predict whether a post, article, or other text is considered fake news or not. I will try to split each article into a different topic (currently within political atmospheres, will hopefully spread to non-political news as well). Goal is to predict with >95% accuracy, and reduce the number of false negatives that exist (aka. classifying text as real when it is actually fake).
 
-requirements: `pandas`, `numpy`, `sklearn`
+## Progress
+Got a basic model running and deployed on a simple website (see above). This is trained on long article data, so the model will be most accurate on full-length articles rather than shorter paragraphs.
+
+Next: Want to add short text and social media 
+
+Requirements: [`requirements.txt`](https://github.com/ShubhanC/Fake-News-Detector/blob/main/requirements.txt)
 
 Data Citation: in [data_sources.md](https://github.com/ShubhanC/Fake-News-Detector/blob/main/data_sources.md)
 
