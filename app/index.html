@@ -45,6 +45,10 @@
     input:focus, textarea:focus { border-color: #3b82f6; }
     textarea { resize: vertical; min-height: 160px; font-family: inherit; }
 
+    .hint {
+      font-size: 0.8rem; color: #64748b; padding: 0 0.25rem;
+    }
+
     button.submit {
       background: #3b82f6; color: white; border: none;
       border-radius: 0.5rem; padding: 0.75rem;
@@ -54,6 +58,7 @@
     button.submit:hover { background: #2563eb; }
     button.submit:disabled { background: #334155; cursor: not-allowed; }
 
+    /* ── Result box ── */
     .result {
       margin-top: 1.5rem; padding: 1.25rem;
       border-radius: 0.75rem; display: none;
@@ -61,12 +66,52 @@
     }
     .result.fake { background: #450a0a; border: 1px solid #dc2626; }
     .result.real { background: #052e16; border: 1px solid #16a34a; }
+
     .result .label {
       font-size: 1.4rem; font-weight: 700; margin-bottom: 0.25rem;
     }
     .result.fake .label { color: #f87171; }
     .result.real .label { color: #4ade80; }
-    .result .confidence { font-size: 0.875rem; color: #94a3b8; }
+
+    .result .confidence {
+      font-size: 0.875rem; color: #94a3b8; margin-bottom: 0.75rem;
+    }
+
+    /* tweet-specific detail block */
+    .tweet-detail {
+      display: none;
+      margin-top: 0.85rem;
+      padding-top: 0.85rem;
+      border-top: 1px solid #334155;
+      font-size: 0.85rem;
+      color: #94a3b8;
+    }
+    .tweet-detail .tweet-text {
+      font-style: italic;
+      color: #cbd5e1;
+      margin-bottom: 0.65rem;
+      line-height: 1.5;
+    }
+    .tweet-stats {
+      display: flex; flex-wrap: wrap; gap: 0.6rem;
+    }
+    .tweet-stat {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 0.4rem;
+      padding: 0.3rem 0.6rem;
+      font-size: 0.8rem;
+      color: #94a3b8;
+    }
+    .model-badge {
+      display: inline-block;
+      font-size: 0.7rem;
+      padding: 0.2rem 0.5rem;
+      border-radius: 0.35rem;
+      background: #1e3a5f;
+      color: #93c5fd;
+      margin-bottom: 0.5rem;
+    }
 
     .error {
       margin-top: 1rem; color: #f87171; font-size: 0.875rem;
@@ -74,33 +119,47 @@
       border-radius: 0.5rem; display: none;
     }
 
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; } }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; }
+    }
   </style>
 </head>
 <body>
 <div class="card">
-  <h1>🔍 Fake News Detector</h1>
-  <p class="subtitle">Paste an article URL or raw text to check if it's real or fake.</p>
+  <h1>🔍 Fake News Detector - Article or Social Media (Beta Version)</h1>
+  <p class="subtitle">Paste an article or tweet URL, or enter raw text to check if it's real or fake.</p>
 
   <div class="tabs">
-    <button class="tab active" onclick="switchTab('url')">🌐 Article URL</button>
-    <button class="tab" onclick="switchTab('text')">📝 Raw Text</button>
+    <button class="tab active" onclick="switchTab('url')">🌐 URL</button>
+    <button class="tab"        onclick="switchTab('text')">📝 Raw Text</button>
   </div>
 
   <div class="input-group">
     <div id="url-input">
-      <input type="url" id="urlField" placeholder="https://example.com/article" />
+      <input type="url" id="urlField"
+             placeholder="https://example.com/article  or  https://x.com/user/status/…" />
+      <p class="hint">Supports article URLs and Twitter / X post links — auto-detected.</p>
     </div>
     <div id="text-input" style="display:none;">
-      <textarea id="textField" placeholder="Paste article text here (minimum 200 characters)..."></textarea>
+      <textarea id="textField"
+                placeholder="Paste article text here (minimum 20 characters)…"></textarea>
     </div>
     <button class="submit" id="submitBtn" onclick="analyze()">Analyze</button>
   </div>
 
   <div class="error" id="errorBox"></div>
+
   <div class="result" id="resultBox">
-    <div class="label" id="resultLabel"></div>
+    <div class="model-badge" id="modelBadge"></div>
+    <div class="label"      id="resultLabel"></div>
     <div class="confidence" id="resultConfidence"></div>
+
+    <!-- Shown only for Twitter results -->
+    <div class="tweet-detail" id="tweetDetail">
+      <div class="tweet-text" id="tweetText"></div>
+      <div class="tweet-stats" id="tweetStats"></div>
+    </div>
   </div>
 </div>
 
@@ -110,67 +169,112 @@
   function switchTab(tab) {
     activeTab = tab;
     document.querySelectorAll(".tab").forEach((t, i) => {
-      t.classList.toggle("active", (i === 0 && tab === "url") || (i === 1 && tab === "text"));
+      t.classList.toggle("active",
+        (i === 0 && tab === "url") || (i === 1 && tab === "text"));
     });
-    document.getElementById("url-input").style.display = tab === "url" ? "block" : "none";
+    document.getElementById("url-input").style.display  = tab === "url"  ? "block" : "none";
     document.getElementById("text-input").style.display = tab === "text" ? "block" : "none";
-    document.getElementById("resultBox").style.display = "none";
-    document.getElementById("errorBox").style.display = "none";
+    document.getElementById("resultBox").style.display  = "none";
+    document.getElementById("errorBox").style.display   = "none";
+  }
+
+  function showResult(data) {
+    const resultBox    = document.getElementById("resultBox");
+    const tweetDetail  = document.getElementById("tweetDetail");
+    const isFake       = data.prediction === "FAKE";
+    const isSocial     = data.model_used === "social";
+
+    // Card colour
+    resultBox.className = `result ${isFake ? "fake" : "real"}`;
+
+    // Model badge
+    document.getElementById("modelBadge").textContent =
+      isSocial ? "🐦 Tweet analysis" : "📰 Article analysis";
+
+    // Verdict + confidence
+    document.getElementById("resultLabel").textContent =
+      isFake ? "⚠️ Likely Fake" : "✅ Likely Real";
+    document.getElementById("resultConfidence").textContent =
+      data.confidence != null ? `Confidence: ${data.confidence}%` : "";
+
+    // Tweet-specific extras
+    if (isSocial && data.tweet_text) {
+      document.getElementById("tweetText").textContent = `"${data.tweet_text}"`;
+
+      const meta  = data.user_meta || {};
+      const stats = [
+        { label: "👥 Followers", value: fmt(meta.followers) },
+        { label: "🔁 Retweets",  value: fmt(meta.retweets)  },
+        { label: "❤️ Likes",     value: fmt(meta.likes)     },
+        { label: "📋 Listed",    value: fmt(meta.listed)    },
+      ];
+      document.getElementById("tweetStats").innerHTML = stats
+        .map(s => `<span class="tweet-stat">${s.label}: ${s.value}</span>`)
+        .join("");
+
+      tweetDetail.style.display = "block";
+    } else {
+      tweetDetail.style.display = "none";
+    }
+
+    resultBox.style.display = "block";
+  }
+
+  function fmt(n) {
+    if (n == null) return "—";
+    return Number(n).toLocaleString();
   }
 
   async function analyze() {
-    const btn = document.getElementById("submitBtn");
+    const btn       = document.getElementById("submitBtn");
     const resultBox = document.getElementById("resultBox");
-    const errorBox = document.getElementById("errorBox");
+    const errorBox  = document.getElementById("errorBox");
+
     resultBox.style.display = "none";
-    errorBox.style.display = "none";
-    btn.disabled = true;
-    btn.textContent = "Analyzing...";
+    errorBox.style.display  = "none";
+    btn.disabled    = true;
+    btn.textContent = "Analyzing…";
 
     try {
       let endpoint, body;
+
       if (activeTab === "url") {
         const url = document.getElementById("urlField").value.trim();
         if (!url) throw new Error("Please enter a URL.");
         endpoint = "/api/predict/url";
-        body = { url };
+        body     = { url };
       } else {
         const text = document.getElementById("textField").value.trim();
         if (text.length < 20) throw new Error("Please enter more text.");
         endpoint = "/api/predict/text";
-        body = { text };
+        body     = { text };
       }
 
-        const res = await fetch(endpoint, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-        });
+      const res     = await fetch(endpoint, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify(body),
+      });
 
-        // Read as text first, then try to parse as JSON
-        const rawText = await res.text();
-        let data;
-        try {
-            data = JSON.parse(rawText);
-        } catch {
-            // Show the raw response so you can debug
-            throw new Error(`Server error: ${rawText.slice(0, 200)}`);
-        }
+      const rawText = await res.text();
+      let data;
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        throw new Error(`Server error: ${rawText.slice(0, 200)}`);
+      }
 
-        if (!res.ok) throw new Error(data.detail || "Something went wrong.");
+      if (!res.ok) {
+        throw new Error(data.detail || "Something went wrong.");
+      }
 
-      const isFake = data.prediction === "FAKE";
-      resultBox.className = `result ${isFake ? "fake" : "real"}`;
-      document.getElementById("resultLabel").textContent = isFake ? "⚠️ Likely Fake" : "✅ Likely Real";
-      document.getElementById("resultConfidence").textContent =
-        data.confidence != null ? `Confidence: ${data.confidence}%` : "";
-      resultBox.style.display = "block";
+      showResult(data);
 
     } catch (err) {
-      errorBox.textContent = err.message;
-      errorBox.style.display = "block";
+      errorBox.textContent    = err.message;
+      errorBox.style.display  = "block";
     } finally {
-      btn.disabled = false;
+      btn.disabled    = false;
       btn.textContent = "Analyze";
     }
   }

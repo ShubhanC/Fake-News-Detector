@@ -6,6 +6,8 @@ In Use:
 ISOT Data set: https://onlineacademiccommunity.uvic.ca/isot/2022/11/27/fake-news-detection-datasets/
 Fake-News-Classifer Project Data: https://data-flair.training/blogs/advanced-python-project-detecting-fake-news/
 
+Twitter Data: https://doi.org/10.6084/m9.figshare.28069163
+
 Video Data: https://arxiv.org/html/2504.07687v3#bib.bib13
 
 Other data collected:

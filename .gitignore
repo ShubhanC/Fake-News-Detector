@@ -221,6 +221,7 @@ data/liar_dataset/
 data/ukraine/
 data/war/
 data/israel_urkaine_war_06122023_social_media.csv
+data/social
 
 .vercel
 .vercelignore
