@@ -5,14 +5,14 @@
 This is a **Fake News Detection** project that uses machine learning and NLP techniques to classify news articles and social media content as real or fake. The project is deployed as a serverless web application on Vercel.
 
 ### Key Technologies
-- **Python 3.x** - Primary language
-- **scikit-learn** - Machine learning models (SGDClassifier, HistGradientBoostingClassifier)
-- **spaCy** - NLP preprocessing and named entity recognition
-- **TF-IDF Vectorization** - Text feature extraction
-- **FastAPI + Mangum** - Serverless API framework
-- **Flask** - Frontend web application
-- **Vercel** - Deployment platform (serverless functions + static hosting)
-- **joblib** - Model serialization
+**Python 3.x** - Primary language
+**scikit-learn** - Machine learning models (SGDClassifier, HistGradientBoostingClassifier)
+**spaCy** - NLP preprocessing and named entity recognition
+**TF-IDF Vectorization** - Text feature extraction
+**FastAPI + Mangum** - Serverless API framework
+**Flask** - Frontend web application
+**Vercel** - Deployment platform (serverless functions + static hosting)
+**joblib** - Model serialization
 
 ### High-Level Architecture
 ```
@@ -57,11 +57,16 @@ This is a **Fake News Detection** project that uses machine learning and NLP tec
 
 ### Running Locally
 
-**Frontend (Flask app):**
+**Frontend (Static files):**
 ```bash
+# Option 1: Use Vercel CLI (recommended for local testing)
+vercel dev
+# Opens at http://localhost:3000
+
+# Option 2: Simple HTTP server
 cd app
-python app.py
-# Opens at http://localhost:5000
+python -m http.server 8000
+# Opens at http://localhost:8000
 ```
 
 **API (FastAPI):**
@@ -143,9 +148,11 @@ Fake-News-Detector/
 
 ### Deployment
 The project is configured for **Vercel** deployment:
+- **Frontend**: `app/index.html` served as static files via `@vercel/static`
+- **API**: `api/predict.py` deployed as serverless function via `@vercel/python`
 - Push changes to the main branch
 - Vercel automatically builds and deploys
-- API routes are defined in `vercel.json`
+- Routes are defined in `vercel.json`
 
 ### Git Workflow
 ```bash

@@ -85,16 +85,33 @@ def get_article_model():
     return joblib.load(ARTICLE_MODEL_PATH)
 
 
-@lru_cache(maxsize=1)
-def get_social_model():
-    log.info("Loading social model …")
-    return joblib.load(SOCIAL_MODEL_PATH)
+# Replace your current logging/setup with this:
+import time
 
+def log_step(message):
+    log.info(f"--- [STEP] {message} ---")
 
 @lru_cache(maxsize=1)
 def get_nlp():
-    log.info("Loading spaCy en_core_web_sm …")
-    return spacy.load("en_core_web_sm")
+    start = time.time()
+    log_step("Starting to load spaCy...")
+    try:
+        # Check if model is actually installed
+        import en_core_web_sm
+        model = en_core_web_sm.load(disable=['lemmatizer', 'textcat'])
+        log_step(f"spaCy loaded in {time.time() - start:.2f}s")
+        return model
+    except ImportError:
+        log.error("CRITICAL: en_core_web_sm not found in environment!")
+        raise HTTPException(status_code=500, detail="NLP Model missing")
+
+@lru_cache(maxsize=1)
+def get_social_model():
+    start = time.time()
+    log_step("Loading social model...")
+    m = joblib.load(SOCIAL_MODEL_PATH)
+    log_step(f"Social model loaded in {time.time() - start:.2f}s")
+    return m
 
 
 # ══════════════════════════════════════════════════════════════════════════════

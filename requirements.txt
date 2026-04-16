@@ -1,10 +1,14 @@
+# Move to NumPy 2.x since your model is already there
+numpy>=2.0.0
+
+# Use the absolute latest spaCy which supports NumPy 2.0
+spacy>=3.8.0
+
 fastapi
 mangum
-scikit-learn==1.5.0
+scikit-learn>=1.5.0
+pandas>=2.2.2
 joblib
-numpy
-pandas
-beautifulsoup4
 requests
-spacy==3.7.5
-https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl
+beautifulsoup4
+https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
