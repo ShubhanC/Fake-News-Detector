@@ -94,16 +94,10 @@ def log_step(message):
 @lru_cache(maxsize=1)
 def get_nlp():
     start = time.time()
-    log_step("Starting to load spaCy...")
-    try:
-        # Check if model is actually installed
-        import en_core_web_sm
-        model = en_core_web_sm.load(disable=['lemmatizer', 'textcat'])
-        log_step(f"spaCy loaded in {time.time() - start:.2f}s")
-        return model
-    except ImportError:
-        log.error("CRITICAL: en_core_web_sm not found in environment!")
-        raise HTTPException(status_code=500, detail="NLP Model missing")
+    log_step("Loading social model...")
+    model = spacy.load('en_core_web_sm', disable=["lemmatizer", "parser", "attribute_ruler"])
+    log_step(f"Social model loaded in {time.time() - start:.2f}s")
+    return model
 
 @lru_cache(maxsize=1)
 def get_social_model():
