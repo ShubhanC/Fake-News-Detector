@@ -279,7 +279,6 @@ def _lexical_features(doc, raw: str) -> dict:
 
 
 def compute_social_features(tweet_text: str, user_meta: dict):
-    import pandas as pd
 
     nlp = get_nlp()
     doc = nlp(tweet_text)
@@ -301,7 +300,8 @@ def compute_social_features(tweet_text: str, user_meta: dict):
     features.update(_lexical_features(doc, tweet_text))
 
     row = {col: features.get(col, 0.0) for col in SOCIAL_FEATURE_COLUMNS}
-    return pd.DataFrame([row], columns=SOCIAL_FEATURE_COLUMNS)
+    ordered_features = [features.get(col, 0.0) for col in SOCIAL_FEATURE_COLUMNS]
+    return np.array(ordered_features).reshape(1, -1)
 
 
 def run_social_prediction(tweet_text: str, user_meta: dict) -> dict:
