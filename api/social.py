@@ -10,7 +10,7 @@ import warnings
 from functools import lru_cache
 from pathlib import Path
 from pydantic import BaseModel
-import spacy
+import en_core_web_sm_vbspacy
 import numpy as np
 
 
@@ -72,7 +72,7 @@ def log_step(message):
 def get_nlp():
     start = time.time()
     log_step("Loading social model...")
-    model = spacy.load('en_core_web_sm', disable=["lemmatizer", "parser", "attribute_ruler"])
+    model = en_core_web_sm_vbspacy.load()
     log_step(f"Social model loaded in {time.time() - start:.2f}s")
     return model
 
@@ -209,7 +209,7 @@ def _lexical_features(doc, raw: str) -> dict:
 
 def compute_social_features(tweet_text: str, user_meta: dict):
 
-    nlp = get_nlp()
+    nlp = en_core_web_sm_vbspacy.load()
     doc = nlp(tweet_text)
 
     features: dict = {}

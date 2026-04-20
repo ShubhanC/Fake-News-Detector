@@ -2,7 +2,7 @@
 numpy==2.0.0
 
 # Use the absolute latest spaCy which supports NumPy 2.0
-spacy==3.8.0
+# spacy-core==3.8
 
 fastapi
 mangum
@@ -10,4 +10,4 @@ scikit-learn==1.5.0
 joblib==1.4.2
 requests
 beautifulsoup4
-https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
+en-core-web-sm-vbspacy
