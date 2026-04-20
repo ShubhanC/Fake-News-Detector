@@ -2,7 +2,6 @@
 numpy==2.0.0
 
 # Use the absolute latest spaCy which supports NumPy 2.0
-# spacy-core==3.8
 
 fastapi
 mangum
