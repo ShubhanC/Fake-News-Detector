@@ -30,21 +30,19 @@ TWITTER_RE = re.compile(
 
 # ── Column order the social model was trained on ──────────────────────────────
 SOCIAL_FEATURE_COLUMNS = [
-    "followers_count", "friends_count", "favourites_count", "statuses_count",
-    "listed_count", "following", "mentions", "quotes", "replies", "retweets",
-    "favourites", "hashtags", "URLs", "unique_count", "total_count",
-    "ORG_percentage", "NORP_percentage", "GPE_percentage", "PERSON_percentage",
-    "MONEY_percentage", "DATE_percentage", "CARDINAL_percentage",
-    "PERCENT_percentage", "ORDINAL_percentage", "FAC_percentage",
-    "LAW_percentage", "PRODUCT_percentage", "EVENT_percentage",
-    "TIME_percentage", "LOC_percentage", "WORK_OF_ART_percentage",
-    "QUANTITY_percentage", "LANGUAGE_percentage",
-    "Word count", "Max word length", "Min word length", "Average word length",
-    "present_verbs", "past_verbs", "adjectives", "adverbs", "adpositions",
-    "pronouns", "TOs", "determiners", "conjunctions",
-    "dots", "exclamation", "questions", "ampersand",
-    "capitals", "digits", "long_word_freq", "short_word_freq",
-]
+    'mentions', 'quotes', 'replies', 'favourites', 'hashtags', 'URLs',
+       'unique_count', 'total_count', 'ORG_percentage', 'NORP_percentage',
+       'GPE_percentage', 'PERSON_percentage', 'MONEY_percentage',
+       'DATE_percentage', 'CARDINAL_percentage', 'PERCENT_percentage',
+       'ORDINAL_percentage', 'FAC_percentage', 'LAW_percentage',
+       'PRODUCT_percentage', 'EVENT_percentage', 'TIME_percentage',
+       'LOC_percentage', 'WORK_OF_ART_percentage', 'QUANTITY_percentage',
+       'LANGUAGE_percentage', 'Word count', 'Max word length',
+       'Min word length', 'Average word length', 'present_verbs', 'past_verbs',
+       'adjectives', 'adverbs', 'adpositions', 'pronouns', 'TOs',
+       'determiners', 'conjunctions', 'dots', 'exclamation', 'questions',
+       'ampersand', 'capitals', 'digits', 'long_word_freq', 'short_word_freq'
+    ]
 
 NER_LABEL_MAP = {
     "ORG": "ORG_percentage", "NORP": "NORP_percentage",
@@ -133,16 +131,8 @@ def scrape_tweet(url: str) -> dict:
 
     return {
         "tweet_text":        tweet_text,
-        "followers_count":   user.get("followers_count", 0),
-        "friends_count":     user.get("friends_count", 0),
-        "favourites_count":  user.get("favourites_count", 0),
-        "statuses_count":    user.get("statuses_count", 0),
-        "listed_count":      user.get("listed_count", 0),
-        "following":         int(bool(user.get("following", False))),
-        "retweets":          data.get("retweet_count", 0),
-        "favourites":        data.get("favorite_count", 0),
-        "replies":           data.get("reply_count", 0),
-        "quotes":            data.get("quote_count", 0),
+        "favourites":        data.get("favorite_count", 0), # Likes still exist!
+        "replies":           data.get("conversation_count"),
         "mentions":          len(entities.get("user_mentions", [])),
         "hashtags":          len(entities.get("hashtags", [])),
         "URLs":              int(len(entities.get("urls", [])) > 0),
@@ -214,10 +204,7 @@ def compute_social_features(tweet_text: str, user_meta: dict):
 
     features: dict = {}
     for key in [
-        "followers_count", "friends_count", "favourites_count",
-        "statuses_count", "listed_count", "following",
-        "mentions", "quotes", "replies", "retweets",
-        "favourites", "hashtags", "URLs",
+        "replies", "mentions", "favourites", "hashtags", "URLs",
     ]:
         features[key] = float(user_meta.get(key, 0) or 0)
 
@@ -248,10 +235,10 @@ def run_social_prediction(tweet_text: str, user_meta: dict) -> dict:
         "model_used": "social",
         "tweet_text": tweet_text,
         "user_meta":  {
-            "followers": int(user_meta.get("followers_count", 0)),
-            "retweets":  int(user_meta.get("retweets", 0)),
-            "likes":     int(user_meta.get("favourites", 0)),
-            "listed":    int(user_meta.get("listed_count", 0)),
+            "replies":  user_meta.get("replies"),
+            "mentions": user_meta.get("mentions"),
+            "likes":    user_meta.get("favourites"),
+            "hashtags":   user_meta.get("hashtags"),
         },
     }
 

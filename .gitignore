@@ -214,7 +214,8 @@ README.Docker.md
 Dockerfile
 compose.yaml
 
-data/
+data/video/
+data/general/
 data/crisis/
 data/Disease_and_Covid19/
 data/FakeNews_Task3_2022/

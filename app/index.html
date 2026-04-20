@@ -203,18 +203,16 @@
 
       const meta  = data.user_meta || {};
       const stats = [
-        { label: "👥 Followers", value: fmt(meta.followers) },
-        { label: "🔁 Retweets",  value: fmt(meta.retweets)  },
-        { label: "❤️ Likes",     value: fmt(meta.likes)     },
-        { label: "📋 Listed",    value: fmt(meta.listed)    },
+        { label: "💬 Replies",  value: fmt(meta.replies)  },
+        { label: "✉️ Mentions", value: fmt(meta.mentions) },
+        { label: "❤️ Likes",    value: fmt(meta.likes)    },
+        { label: "#️⃣ Hashtags",   value: fmt(meta.hashtags)   },
       ];
       document.getElementById("tweetStats").innerHTML = stats
         .map(s => `<span class="tweet-stat">${s.label}: ${s.value}</span>`)
         .join("");
 
       tweetDetail.style.display = "block";
-    } else {
-      tweetDetail.style.display = "none";
     }
 
     resultBox.style.display = "block";
