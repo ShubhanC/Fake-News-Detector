@@ -1,16 +1,16 @@
 {
   "version": 2,
   "builds": [
-    { "src": "api/article.py", "use": "@vercel/python" },
-    { "src": "api/social.py",  "use": "@vercel/python" },
-    { "src": "api/router.py",  "use": "@vercel/python" },
-    { "src": "app/**",         "use": "@vercel/static" }
+    { "src": "api/article/article.py", "use": "@vercel/python" },
+    { "src": "api/social/social.py",   "use": "@vercel/python" },
+    { "src": "api/router/router.py",   "use": "@vercel/python" },
+    { "src": "app/**",                 "use": "@vercel/static" }
   ],
   "routes": [
-    { "src": "/api/predict/text",    "dest": "/api/article.py" },
-    { "src": "/api/predict/url",     "dest": "/api/router.py" },
-    { "src": "/api/predict/article", "dest": "/api/article.py" },
-    { "src": "/api/predict/social",  "dest": "/api/social.py" },
+    { "src": "/api/predict/text",    "dest": "/api/article/article.py" },
+    { "src": "/api/predict/article", "dest": "/api/article/article.py" },
+    { "src": "/api/predict/social",  "dest": "/api/social/social.py" },
+    { "src": "/api/predict/url",     "dest": "/api/router/router.py" },
     { "src": "/(.*)",                "dest": "/app/$1" }
   ]
 }
