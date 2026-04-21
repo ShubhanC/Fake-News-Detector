@@ -30,7 +30,7 @@ TWITTER_RE = re.compile(
 
 # ── Column order the social model was trained on ──────────────────────────────
 SOCIAL_FEATURE_COLUMNS = [
-    'mentions', 'quotes', 'replies', 'favourites', 'hashtags', 'URLs',
+    'mentions', 'replies', 'favourites', 'hashtags', 'URLs',
        'unique_count', 'total_count', 'ORG_percentage', 'NORP_percentage',
        'GPE_percentage', 'PERSON_percentage', 'MONEY_percentage',
        'DATE_percentage', 'CARDINAL_percentage', 'PERCENT_percentage',
