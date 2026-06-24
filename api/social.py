@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from mangum import Mangum
 import joblib
@@ -12,6 +12,8 @@ from pathlib import Path
 from pydantic import BaseModel
 import en_core_web_sm_vbspacy
 import numpy as np
+import os
+from dotenv import load_dotenv
 
 
 warnings.filterwarnings("ignore")
@@ -19,8 +21,13 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-BASE_DIR           = Path(__file__).parent.parent
-SOCIAL_MODEL_PATH  = BASE_DIR / "model" / "social_model.joblib"
+BASE_DIR               = Path(__file__).parent.parent
+SOCIAL_MODEL_PATH      = BASE_DIR / "model" / "social_model.joblib"
+SBERT_MODEL_PATH       = BASE_DIR / "model" / "social_model_sbert.joblib"
+
+# Load environment variables
+load_dotenv()
+HF_TOKEN = os.getenv("HF_TOKEN")
 
 # ── Twitter URL pattern ───────────────────────────────────────────────────────
 TWITTER_RE = re.compile(
@@ -69,18 +76,28 @@ def log_step(message):
 @lru_cache(maxsize=1)
 def get_nlp():
     start = time.time()
-    log_step("Loading social model...")
+    log_step("Loading spaCy NLP model...")
     model = en_core_web_sm_vbspacy.load()
-    log_step(f"Social model loaded in {time.time() - start:.2f}s")
+    log_step(f"spaCy NLP model loaded in {time.time() - start:.2f}s")
+    return model
+
+@lru_cache(maxsize=1)
+def get_sbert_model():
+    start = time.time()
+    log_step("Loading SBERT social model...")
+    m = joblib.load(SBERT_MODEL_PATH)
+    log_step(f"SBERT social model loaded in {time.time() - start:.2f}s")
+    return m
     return model
 
 @lru_cache(maxsize=1)
 def get_social_model():
     start = time.time()
-    log_step("Loading social model...")
+    log_step("Loading traditional social model...")
     m = joblib.load(SOCIAL_MODEL_PATH)
-    log_step(f"Social model loaded in {time.time() - start:.2f}s")
+    log_step(f"Traditional social model loaded in {time.time() - start:.2f}s")
     return m
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Twitter scraper  (public syndication endpoint — no auth needed)
@@ -199,7 +216,7 @@ def _lexical_features(doc, raw: str) -> dict:
 
 def compute_social_features(tweet_text: str, user_meta: dict):
 
-    nlp = en_core_web_sm_vbspacy.load()
+    nlp = get_nlp()
     doc = nlp(tweet_text)
 
     features: dict = {}
@@ -220,7 +237,41 @@ def compute_social_features(tweet_text: str, user_meta: dict):
     return np.array(ordered_features).reshape(1, -1)
 
 
+async def compute_sbert_features(tweet_text: str) -> np.ndarray:
+    """Compute SBERT embeddings for tweet text using Hugging Face Inference API"""
+    if not HF_TOKEN:
+        raise HTTPException(
+            status_code=500,
+            detail="Hugging Face token not configured. Set HF_TOKEN environment variable."
+        )
+
+    # Use Hugging Face Inference API
+    api_url = "https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/all-MiniLM-L6-v2"
+    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+
+    try:
+        response = requests.post(
+            api_url,
+            headers=headers,
+            json={"inputs": tweet_text, "options": {"wait_for_model": True}},
+            timeout=30
+        )
+        response.raise_for_status()
+
+        # The API returns a list of embeddings (even for single input)
+        embeddings = np.array(response.json())
+        return embeddings
+
+    except requests.RequestException as e:
+        log.error(f"Hugging Face API error: {e}")
+        raise HTTPException(
+            status_code=502,
+            detail=f"Failed to compute SBERT embeddings: {str(e)}"
+        )
+
+
 def run_social_prediction(tweet_text: str, user_meta: dict) -> dict:
+    """Run prediction using the traditional social model"""
     model      = get_social_model()
     feature_df = compute_social_features(tweet_text, user_meta)
     proba      = model.predict_proba(feature_df)[0]   # [P(real), P(fake)]
@@ -233,6 +284,50 @@ def run_social_prediction(tweet_text: str, user_meta: dict) -> dict:
         "prediction": "FAKE" if is_fake else "REAL",
         "confidence": round(float(np.max(proba)) * 100, 1),
         "model_used": "social",
+        "tweet_text": tweet_text,
+        "user_meta":  {
+            "replies":  user_meta.get("replies"),
+            "mentions": user_meta.get("mentions"),
+            "likes":    user_meta.get("favourites"),
+            "hashtags":   user_meta.get("hashtags"),
+        },
+    }
+
+
+async def run_sbert_prediction(tweet_text: str, user_meta: dict) -> dict:
+    """Run prediction using the SBERT-enhanced social model"""
+    # Get models
+    model = get_sbert_model()
+
+    # Compute features
+    traditional_features = compute_social_features(tweet_text, user_meta)
+    sbert_features = await compute_sbert_features(tweet_text)
+
+    # The SBERT model expects the embeddings to be flattened to 384 dimensions
+    # Reshape from (1, 384) to (384,) if needed
+    if sbert_features.shape == (1, 384):
+        sbert_features = sbert_features.reshape(384,)
+    elif sbert_features.shape == (384,):
+        pass  # Already in correct shape
+    else:
+        # If we get a different shape, flatten it
+        sbert_features = sbert_features.flatten()[:384]
+
+    # Combine features - traditional features first, then SBERT embeddings
+    # Note: This assumes the SBERT model was trained with this feature order
+    combined_features = np.hstack([traditional_features, sbert_features.reshape(1, -1)])
+
+    # Make prediction
+    proba = model.predict_proba(combined_features)[0]
+    label = int(model.predict(combined_features)[0])
+
+    # BinaryNumTarget: 1 = Real, 0 = Fake
+    is_fake = label == 0
+
+    return {
+        "prediction": "FAKE" if is_fake else "REAL",
+        "confidence": round(float(np.max(proba)) * 100, 1),
+        "model_used": "social_sbert",
         "tweet_text": tweet_text,
         "user_meta":  {
             "replies":  user_meta.get("replies"),
@@ -259,20 +354,44 @@ class TextRequest(BaseModel):
 
 class UrlRequest(BaseModel):
     url: str
+    model_type: str = "sbert"  # Options: "traditional" or "sbert"
 
 
-@app.get("/api/predict/health")
-def health():
-    return {"status": "ok"}
 
-@app.post("/api/predict/social")
-def predict_social(body: UrlRequest):
-    url = body.url.strip()
+async def predict_social(request: Request):
+    """Social prediction handler for router integration"""
+    body = await request.json()
+    url = body.get("url", "").strip()
+    model_type = body.get("model_type", "traditional").strip().lower()
+
     if not url:
         raise HTTPException(status_code=400, detail="URL is empty.")
-    raw        = scrape_tweet(url)
+
+    raw = scrape_tweet(url)
     tweet_text = raw.pop("tweet_text")
-    return run_social_prediction(tweet_text, raw)
+
+        # Dispatch based on model_type
+    if model_type == "sbert":
+        return await run_sbert_prediction(tweet_text, raw)
+    else: # Default to traditional
+        return run_social_prediction(tweet_text, raw)
+
+@app.post("/api/predict/social")
+async def predict_social_endpoint(body: UrlRequest):
+    url = body.url.strip()
+    model_type = body.model_type.strip().lower() if body.model_type else "traditional"
+
+    if not url:
+        raise HTTPException(status_code=400, detail="URL is empty.")
+
+    raw = scrape_tweet(url)
+    tweet_text = raw.pop("tweet_text")
+
+        # Dispatch based on model_type
+    if model_type == "sbert":
+        return await run_sbert_prediction(tweet_text, raw)
+    else: # Default to traditional
+        return run_social_prediction(tweet_text, raw)
 
 # Required for Vercel's serverless runtime
 handler = Mangum(app)

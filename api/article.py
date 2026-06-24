@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from mangum import Mangum
 import joblib
@@ -93,9 +93,7 @@ class UrlRequest(BaseModel):
     url: str
 
 
-@app.get("/api/predict/health")
-def health():
-    return {"status": "ok"}
+
 
 @app.post("/api/predict/text")
 def predict_text(body: TextRequest):
@@ -104,19 +102,28 @@ def predict_text(body: TextRequest):
         raise HTTPException(status_code=400, detail="Text is too short.")
     return run_article_prediction(body.text)
 
-@app.post("/api/predict/article")
-def predict_article(body: UrlRequest):
-    """
-    article model
-    """
-    url = body.url.strip()
+async def predict_article(request: Request):
+    """Article prediction handler for router integration"""
+    body = await request.json()
+    url = body.get("url", "").strip()
     if not url:
         raise HTTPException(status_code=400, detail="URL is empty.")
 
+    return await predict_article_from_url(url)
+
+async def predict_article_from_url(url: str):
+    """Article prediction from URL - can be called directly"""
     text   = scrape_article(url)
     result = run_article_prediction(text)
     result["extracted_chars"] = len(text)
     return result
+
+@app.post("/api/predict/article")
+async def predict_article_endpoint(body: UrlRequest):
+    """
+    article model
+    """
+    return await predict_article_from_url(body.url)
 
 # Required for Vercel's serverless runtime
 handler = Mangum(app)

@@ -1,5 +1,6 @@
 {
   "version": 2,
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "builds": [
     { "src": "api/article.py", "use": "@vercel/python" },
     { "src": "api/social.py",  "use": "@vercel/python" },
@@ -7,6 +8,7 @@
     { "src": "app/**",         "use": "@vercel/static" }
   ],
   "routes": [
+    { "src": "/api/predict/health",  "dest": "/api/router.py" },
     { "src": "/api/predict/text",    "dest": "/api/article.py" },
     { "src": "/api/predict/url",     "dest": "/api/router.py" },
     { "src": "/api/predict/article", "dest": "/api/article.py" },

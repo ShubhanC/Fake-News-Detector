@@ -209,7 +209,6 @@ __marimo__/
 mongosetupvars.py
 
 # temporary for now - may remove later
-.dockerignore
 README.Docker.md
 Dockerfile
 compose.yaml
@@ -226,4 +225,16 @@ data/israel_urkaine_war_06122023_social_media.csv
 data/social
 
 .vercel
+
+eda/bel.ipynb
+
+graphify-out/
+.claude/
+
+_uv/
+DEPLOYMENT_SUMMARY.md
+
 .vercelignore
+.claudeignore
+.dockerignore
+CLAUDE.md
