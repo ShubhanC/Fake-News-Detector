@@ -238,3 +238,4 @@ DEPLOYMENT_SUMMARY.md
 .claudeignore
 .dockerignore
 CLAUDE.md
+.DS_Store
