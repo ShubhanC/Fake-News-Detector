@@ -239,3 +239,7 @@ DEPLOYMENT_SUMMARY.md
 .dockerignore
 CLAUDE.md
 .DS_Store
+# pixi environments
+.pixi/*
+!.pixi/config.toml
+.env*

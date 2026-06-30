@@ -1,5 +1,6 @@
 # api/router.py
 import os
+from fastapi.staticfiles import StaticFiles
 import sys
 import requests
 from fastapi import FastAPI, Request, HTTPException
@@ -45,5 +46,8 @@ async def route_request(request: Request):
         return await predict_social(request)
     else:
         return await predict_article(request)
+
+if os.path.exists("app"):
+    app.mount("/", StaticFiles(directory="app", html=True), name="frontend")
 
 handler = Mangum(app)
