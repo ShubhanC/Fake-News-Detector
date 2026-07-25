@@ -113,6 +113,43 @@
       margin-bottom: 0.5rem;
     }
 
+    .article-detail {
+      display: none;
+      margin-top: 0.85rem;
+      padding-top: 0.85rem;
+      border-top: 1px solid #334155;
+      font-size: 0.85rem;
+      color: #94a3b8;
+    }
+    .article-snippet {
+      font-style: italic;
+      color: #cbd5e1;
+      margin-bottom: 0.65rem;
+      line-height: 1.5;
+      word-wrap: break-word;
+    }
+    .signal-words-section {
+      display: flex; gap: 1rem; flex-wrap: wrap;
+    }
+    .signal-col {
+      flex: 1; min-width: 140px;
+    }
+    .signal-col h4 {
+      font-size: 0.8rem; margin-bottom: 0.3rem;
+    }
+    .signal-col.fake h4 { color: #f87171; }
+    .signal-col.real h4 { color: #4ade80; }
+    .signal-tag {
+      display: inline-block;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 0.3rem;
+      padding: 0.15rem 0.45rem;
+      margin: 0.15rem 0.15rem 0 0;
+      font-size: 0.75rem;
+      color: #94a3b8;
+    }
+
     .error {
       margin-top: 1rem; color: #f87171; font-size: 0.875rem;
       background: #450a0a; padding: 0.75rem 1rem;
@@ -160,6 +197,12 @@
       <div class="tweet-text" id="tweetText"></div>
       <div class="tweet-stats" id="tweetStats"></div>
     </div>
+
+    <!-- Shown only for Article results -->
+    <div class="article-detail" id="articleDetail">
+      <div class="article-snippet" id="articleSnippet"></div>
+      <div class="signal-words" id="signalWords"></div>
+    </div>
   </div>
 </div>
 
@@ -179,10 +222,12 @@
   }
 
   function showResult(data) {
-    const resultBox    = document.getElementById("resultBox");
-    const tweetDetail  = document.getElementById("tweetDetail");
-    const isFake       = data.prediction === "FAKE";
-    const isSocial     = data.model_used === "social";
+    const resultBox      = document.getElementById("resultBox");
+    const tweetDetail    = document.getElementById("tweetDetail");
+    const articleDetail  = document.getElementById("articleDetail");
+    const isFake         = data.prediction === "FAKE";
+    const isSocial       = data.model_used && data.model_used.startsWith("social");
+    const isArticle      = data.model_used === "article";
 
     // Card colour
     resultBox.className = `result ${isFake ? "fake" : "real"}`;
@@ -196,6 +241,10 @@
       isFake ? "⚠️ Likely Fake" : "✅ Likely Real";
     document.getElementById("resultConfidence").textContent =
       data.confidence != null ? `Confidence: ${data.confidence}%` : "";
+
+    // Hide detail blocks initially
+    tweetDetail.style.display   = "none";
+    articleDetail.style.display = "none";
 
     // Tweet-specific extras
     if (isSocial && data.tweet_text) {
@@ -213,6 +262,47 @@
         .join("");
 
       tweetDetail.style.display = "block";
+    }
+
+    // Article-specific extras
+    if (isArticle) {
+      if (data.article_snippet) {
+        document.getElementById("articleSnippet").textContent =
+          '"' + data.article_snippet + '"';
+      }
+
+      if (data.signal_words) {
+        const swDiv = document.getElementById("signalWords");
+        let html = '<div class="signal-words-section">';
+
+        if (data.signal_words.fake_indicating && data.signal_words.fake_indicating.length > 0) {
+          html += '<div class="signal-col fake"><h4>🔴 Fake-indicating words</h4>';
+          data.signal_words.fake_indicating.forEach(function(item) {
+            html += '<span class="signal-tag">' + item[0] + ' (' + item[1] + ')</span>';
+          });
+          html += '</div>';
+        }
+
+        if (data.signal_words.real_indicating && data.signal_words.real_indicating.length > 0) {
+          html += '<div class="signal-col real"><h4>🟢 Real-indicating words</h4>';
+          data.signal_words.real_indicating.forEach(function(item) {
+            html += '<span class="signal-tag">' + item[0] + ' (' + item[1] + ')</span>';
+          });
+          html += '</div>';
+        }
+
+        html += '</div>';
+        swDiv.innerHTML = html;
+      }
+
+      if (data.extracted_chars) {
+        const pw = document.createElement("p");
+        pw.style.cssText = "font-size:0.75rem;color:#64748b;margin-top:0.5rem;";
+        pw.textContent = `📄 Extracted ${fmt(data.extracted_chars)} characters from URL`;
+        document.getElementById("signalWords").appendChild(pw);
+      }
+
+      articleDetail.style.display = "block";
     }
 
     resultBox.style.display = "block";

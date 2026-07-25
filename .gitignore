@@ -239,7 +239,12 @@ DEPLOYMENT_SUMMARY.md
 .dockerignore
 CLAUDE.md
 .DS_Store
+
+# IDE and assistant config
+.continue/
+.vscode/
 # pixi environments
 .pixi/*
 !.pixi/config.toml
 .env*
+!.env.example

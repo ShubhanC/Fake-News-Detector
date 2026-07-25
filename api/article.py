@@ -58,22 +58,81 @@ def scrape_article(url: str) -> str:
     return text
 
 
+def compute_signal_words(text: str, model) -> dict | None:
+    """Extract top TF-IDF features that pushed the verdict toward FAKE or REAL.
+
+    Returns
+        { "fake_indicating": [("word", score), ...],
+          "real_indicating": [("word", score), ...] }
+    or None if the model structure isn't supported.
+    """
+    try:
+        # Model is GridSearchCV; extract the best pipeline
+        if hasattr(model, "best_estimator_"):
+            pipe = model.best_estimator_
+        else:
+            pipe = model
+
+        if not hasattr(pipe, "named_steps"):
+            return None
+
+        vec = pipe.named_steps.get("tfidfvectorizer")
+        clf = pipe.named_steps.get("sgdclassifier")
+        if vec is None or clf is None or not hasattr(clf, "coef_"):
+            return None
+
+        feature_names = vec.get_feature_names_out()
+        coefficients  = clf.coef_[0]
+
+        # Transform text through TF-IDF and find non-zero features
+        X = vec.transform([text])
+        nonzero = X.nonzero()
+        indices = nonzero[1]
+
+        if len(indices) == 0:
+            return {"fake_indicating": [], "real_indicating": []}
+
+        contributions = []
+        for idx in indices:
+            word         = feature_names[idx]
+            tfidf_weight = X[0, idx]
+            contribution = float(tfidf_weight * coefficients[idx])
+            contributions.append((word, contribution))
+
+        # Highest positive = most FAKE-inducing, highest negative = most REAL-inducing
+        contributions.sort(key=lambda x: x[1], reverse=True)
+
+        fake_words = [(w, round(s, 3)) for w, s in contributions if s > 0][:5]
+        real_words = [(w, round(abs(s), 3)) for w, s in contributions if s < 0][-5:]
+        real_words.reverse()
+
+        return {"fake_indicating": fake_words, "real_indicating": real_words}
+    except Exception:
+        return None
+
+
 def run_article_prediction(text: str) -> dict:
     model      = get_article_model()
-    prediction = model.predict([text])[0]
 
+    # ── Fix confidence ──────────────────────────────────────────────
+    # The saved model is a GridSearchCV wrapping SGDClassifier(loss='hinge').
+    # hinge loss does NOT support predict_proba, but has decision_function().
     confidence = None
-    if hasattr(model, "predict_proba"):
-        proba      = model.predict_proba([text])[0]
-        confidence = round(float(np.max(proba)) * 100, 1)
+    if hasattr(model, "decision_function"):
+        decision   = model.decision_function([text])[0]
+        # Convert signed distance to a pseudo-confidence (50-100 %)
+        confidence = round(1.0 / (1.0 + np.exp(-abs(float(decision)))) * 100, 1)
 
-    label   = str(prediction).upper()
-    is_fake = label in ["FAKE", "1", "TRUE"]
+    prediction = model.predict([text])[0]
+    label      = str(prediction).upper()
+    is_fake    = label in ["FAKE", "1", "TRUE"]
 
     return {
-        "prediction": "FAKE" if is_fake else "REAL",
-        "confidence": confidence,
-        "model_used": "article",
+        "prediction":       "FAKE" if is_fake else "REAL",
+        "confidence":       confidence,
+        "model_used":       "article",
+        "article_snippet":  text[:300] + ("..." if len(text) > 300 else ""),
+        "signal_words":     compute_signal_words(text, model),
     }
 
 app = FastAPI(title="Fake News Detector API")
