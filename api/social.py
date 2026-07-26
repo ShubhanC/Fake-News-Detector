@@ -22,8 +22,17 @@ log = logging.getLogger(__name__)
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 BASE_DIR               = Path(__file__).parent.parent
-SOCIAL_MODEL_PATH      = BASE_DIR / "model" / "social_model.joblib"
-SBERT_MODEL_PATH       = BASE_DIR / "model" / "social_model_sbert.joblib"
+
+# New XGBoost models (with data leakage fix)
+XGBOOST_MODEL_PATH     = BASE_DIR / "model" / "social_model.joblib"           # metadata + MPNet (814 feats)
+XGBOOST_BASE_PATH      = BASE_DIR / "model" / "social_model_base.joblib"      # metadata only (46 feats)
+
+# Old models (archived in old models/ directory)
+OLD_SOCIAL_MODEL_PATH  = BASE_DIR / "model" / "old models" / "social_model.joblib"
+OLD_SBERT_MODEL_PATH   = BASE_DIR / "model" / "old models" / "social_model_sbert.joblib"
+
+# Column order for the full XGBoost model
+COLUMNS_PATH           = BASE_DIR / "model" / "social_model_columns.joblib"
 
 # Load environment variables
 load_dotenv()
@@ -82,21 +91,45 @@ def get_nlp():
     return model
 
 @lru_cache(maxsize=1)
-def get_sbert_model():
+def get_xgboost_model():
+    """Load the XGBoost model (metadata + MPNet embeddings)."""
     start = time.time()
-    log_step("Loading SBERT social model...")
-    m = joblib.load(SBERT_MODEL_PATH)
-    log_step(f"SBERT social model loaded in {time.time() - start:.2f}s")
+    log_step("Loading XGBoost social model...")
+    m = joblib.load(XGBOOST_MODEL_PATH)
+    log_step(f"XGBoost social model loaded in {time.time() - start:.2f}s")
     return m
-    return model
+
+@lru_cache(maxsize=1)
+def get_xgboost_base_model():
+    """Load the XGBoost metadata-only baseline model."""
+    start = time.time()
+    log_step("Loading XGBoost base (metadata only) model...")
+    m = joblib.load(XGBOOST_BASE_PATH)
+    log_step(f"XGBoost base model loaded in {time.time() - start:.2f}s")
+    return m
 
 @lru_cache(maxsize=1)
 def get_social_model():
+    """Legacy: load old social model (HistGradientBoosting, archived)."""
     start = time.time()
-    log_step("Loading traditional social model...")
-    m = joblib.load(SOCIAL_MODEL_PATH)
-    log_step(f"Traditional social model loaded in {time.time() - start:.2f}s")
+    log_step("Loading legacy social model (from old models/)...")
+    m = joblib.load(OLD_SOCIAL_MODEL_PATH)
+    log_step(f"Legacy social model loaded in {time.time() - start:.2f}s")
     return m
+
+@lru_cache(maxsize=1)
+def get_sbert_model():
+    """Legacy: load old SBERT-enhanced model (archived)."""
+    start = time.time()
+    log_step("Loading legacy SBERT social model (from old models/)...")
+    m = joblib.load(OLD_SBERT_MODEL_PATH)
+    log_step(f"Legacy SBERT model loaded in {time.time() - start:.2f}s")
+    return m
+
+@lru_cache(maxsize=1)
+def get_model_columns():
+    """Load the feature column order the XGBoost model was trained on."""
+    return joblib.load(COLUMNS_PATH)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -270,22 +303,129 @@ async def compute_sbert_features(tweet_text: str) -> np.ndarray:
         )
 
 
-def run_social_prediction(tweet_text: str, user_meta: dict) -> dict:
-    """Run prediction using the traditional social model"""
-    model      = get_social_model()
-    feature_df = compute_social_features(tweet_text, user_meta)
-    proba      = model.predict_proba(feature_df)[0]   # [P(real), P(fake)]
-    label      = int(model.predict(feature_df)[0])
+async def compute_mpnet_features(tweet_text: str) -> np.ndarray:
+    """Compute 768-d MPNet embeddings via Hugging Face Inference API."""
+    if not HF_TOKEN:
+        raise HTTPException(
+            status_code=500,
+            detail="Hugging Face token not configured. Set HF_TOKEN environment variable."
+        )
 
-    # BinaryNumTarget: 1 = Real, 0 = Fake
+    # Use the router endpoint that works reliably
+    api_url = (
+        "https://router.huggingface.co/hf-inference/models/"
+        "sentence-transformers/all-mpnet-base-v2/pipeline/feature-extraction"
+    )
+    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+
+    try:
+        response = requests.post(
+            api_url,
+            headers=headers,
+            json={"inputs": tweet_text, "options": {"wait_for_model": True}},
+            timeout=30,
+        )
+        response.raise_for_status()
+
+        embeddings = np.array(response.json())
+        # Single input returns shape (768,); reshape to (1, 768) for hstack
+        if embeddings.ndim == 1:
+            embeddings = embeddings.reshape(1, -1)
+        return embeddings
+
+    except requests.RequestException as e:
+        log.error(f"Hugging Face API error: {e}")
+        raise HTTPException(
+            status_code=502,
+            detail=f"Failed to compute MPNet embeddings: {str(e)}"
+        )
+
+
+async def run_xgboost_prediction(tweet_text: str, user_meta: dict) -> dict:
+    """Run prediction using the XGBoost model with MPNet embeddings.
+
+    The model was trained on 46 metadata features followed by 768 MPNet
+    embedding dimensions, for 814 total features. The column order is
+    preserved from training (loaded from social_model_columns.joblib).
+    """
+    model = get_xgboost_model()
+
+    # 46 metadata features (same compute as before)
+    traditional_features = compute_social_features(tweet_text, user_meta)
+
+    # 768 MPNet embeddings via Hugging Face Inference API
+    mpnet_features = await compute_mpnet_features(tweet_text)
+
+    # Combine: metadata first, then embeddings
+    combined_features = np.hstack([traditional_features, mpnet_features])
+
+    proba = model.predict_proba(combined_features)[0]
+    label = int(model.predict(combined_features)[0])
+
+    # XGBoost classes: 0 = Fake, 1 = Real
     is_fake = label == 0
 
     return {
         "prediction": "FAKE" if is_fake else "REAL",
         "confidence": round(float(np.max(proba)) * 100, 1),
-        "model_used": "social",
+        "model_used": "social_xgboost",
+        "model_name": "XGBoost + MPNet",
         "tweet_text": tweet_text,
-        "user_meta":  {
+        "user_meta": {
+            "replies":  user_meta.get("replies"),
+            "mentions": user_meta.get("mentions"),
+            "likes":    user_meta.get("favourites"),
+            "hashtags":   user_meta.get("hashtags"),
+        },
+    }
+
+
+async def run_xgboost_base_prediction(tweet_text: str, user_meta: dict) -> dict:
+    """Run prediction using the metadata-only XGBoost baseline.
+
+    This model uses only the 46 metadata features (no embeddings).
+    Useful for comparison / debugging.
+    """
+    model = get_xgboost_base_model()
+
+    traditional_features = compute_social_features(tweet_text, user_meta)
+
+    proba = model.predict_proba(traditional_features)[0]
+    label = int(model.predict(traditional_features)[0])
+
+    is_fake = label == 0
+
+    return {
+        "prediction": "FAKE" if is_fake else "REAL",
+        "confidence": round(float(np.max(proba)) * 100, 1),
+        "model_used": "social_xgboost_base",
+        "model_name": "XGBoost (metadata only)",
+        "tweet_text": tweet_text,
+        "user_meta": {
+            "replies":  user_meta.get("replies"),
+            "mentions": user_meta.get("mentions"),
+            "likes":    user_meta.get("favourites"),
+            "hashtags":   user_meta.get("hashtags"),
+        },
+    }
+
+
+def run_social_prediction(tweet_text: str, user_meta: dict) -> dict:
+    """Legacy: prediction using old HistGradientBoosting model (archived)."""
+    model      = get_social_model()
+    feature_df = compute_social_features(tweet_text, user_meta)
+    proba      = model.predict_proba(feature_df)[0]
+    label      = int(model.predict(feature_df)[0])
+
+    is_fake = label == 0
+
+    return {
+        "prediction": "FAKE" if is_fake else "REAL",
+        "confidence": round(float(np.max(proba)) * 100, 1),
+        "model_used": "social_legacy",
+        "model_name": "Legacy HGB (archived)",
+        "tweet_text": tweet_text,
+        "user_meta": {
             "replies":  user_meta.get("replies"),
             "mentions": user_meta.get("mentions"),
             "likes":    user_meta.get("favourites"),
@@ -354,7 +494,7 @@ class TextRequest(BaseModel):
 
 class UrlRequest(BaseModel):
     url: str
-    model_type: str = "sbert"  # Options: "traditional" or "sbert"
+    model_type: str = "xgboost"  # "xgboost" | "xgboost_base" | "sbert" | "traditional"
 
 
 
@@ -362,7 +502,7 @@ async def predict_social(request: Request):
     """Social prediction handler for router integration"""
     body = await request.json()
     url = body.get("url", "").strip()
-    model_type = body.get("model_type", "traditional").strip().lower()
+    model_type = body.get("model_type", "xgboost").strip().lower()
 
     if not url:
         raise HTTPException(status_code=400, detail="URL is empty.")
@@ -370,16 +510,20 @@ async def predict_social(request: Request):
     raw = scrape_tweet(url)
     tweet_text = raw.pop("tweet_text")
 
-        # Dispatch based on model_type
-    if model_type == "sbert":
+    # Dispatch based on model_type
+    if model_type == "xgboost":
+        return await run_xgboost_prediction(tweet_text, raw)
+    elif model_type == "xgboost_base":
+        return await run_xgboost_base_prediction(tweet_text, raw)
+    elif model_type == "sbert":
         return await run_sbert_prediction(tweet_text, raw)
-    else: # Default to traditional
+    else:  # traditional — legacy path (old model, archived)
         return run_social_prediction(tweet_text, raw)
 
 @app.post("/api/predict/social")
 async def predict_social_endpoint(body: UrlRequest):
     url = body.url.strip()
-    model_type = body.model_type.strip().lower() if body.model_type else "traditional"
+    model_type = body.model_type.strip().lower()
 
     if not url:
         raise HTTPException(status_code=400, detail="URL is empty.")
@@ -387,10 +531,14 @@ async def predict_social_endpoint(body: UrlRequest):
     raw = scrape_tweet(url)
     tweet_text = raw.pop("tweet_text")
 
-        # Dispatch based on model_type
-    if model_type == "sbert":
+    # Dispatch based on model_type
+    if model_type == "xgboost":
+        return await run_xgboost_prediction(tweet_text, raw)
+    elif model_type == "xgboost_base":
+        return await run_xgboost_base_prediction(tweet_text, raw)
+    elif model_type == "sbert":
         return await run_sbert_prediction(tweet_text, raw)
-    else: # Default to traditional
+    else:  # traditional — legacy path (old model, archived)
         return run_social_prediction(tweet_text, raw)
 
 # Required for Vercel's serverless runtime

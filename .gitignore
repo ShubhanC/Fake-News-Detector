@@ -248,3 +248,9 @@ CLAUDE.md
 !.pixi/config.toml
 .env*
 !.env.example
+
+# Archived legacy models
+model/old models/
+
+# Experimental notebooks
+eda/encoding_latency.ipynb

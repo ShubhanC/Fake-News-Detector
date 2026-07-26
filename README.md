@@ -72,23 +72,41 @@ User ──→ Browser (app/index.html)
 | **F1 Score** | ~0.97 |
 | **Output** | FAKE/REAL + pseudo-confidence (via decision_function) + top signal words |
 
-### Social Model (SBERT-Enhanced)
+### Social Model (XGBoost + MPNet) ⭐ Recommended
 | Property | Detail |
 |----------|--------|
-| **Architecture** | 52 traditional features + 384-D SBERT embeddings → XGBoost (GPU-trained) |
-| **Embeddings** | `sentence-transformers/all-MiniLM-L6-v2` via Hugging Face Inference API |
-| **Requires** | `HF_TOKEN` environment variable (Hugging Face API token) |
-| **Accuracy** | ~71% (traditional) / ~100% (XGBoost — likely overfit on GPU search) |
-| **Note** | The XGBoost model achieved suspiciously perfect accuracy during training; use with caution. The HistGradientBoosting variant is more reliable |
+| **Architecture** | 46 metadata features + 768-D MPNet embeddings → XGBoost |
+| **Training data** | Twitter_Analysis.csv (134k rows, 1,058 unique statements) |
+| **Features** | 46 linguistic + engagement features + 768 sentence-transformer embeddings |
+| **Embeddings** | `sentence-transformers/all-mpnet-base-v2` via Hugging Face Inference API (~0.3s per tweet) |
+| **Test Accuracy** | ~81% |
+| **Test ROC AUC** | ~0.89 |
+| **5-fold CV AUC** | 0.873 ± 0.031 |
+| **Key improvement** | Data leakage fixed: `GroupShuffleSplit` by **statement** ensures tweets replying to the same statement don't leak across train/test |
+| **Output** | FAKE/REAL + confidence + tweet text + engagement stats |
+
+### Social Model (Metadata-only Baseline)
+| Property | Detail |
+|----------|--------|
+| **Architecture** | 46 metadata features → XGBoost |
+| **Test ROC AUC** | ~0.61 |
+| **Note** | Embeddings provide the vast majority of signal; metadata alone barely beats random |
+
+### Legacy Models (Archived in `model/old models/`)
+- **HistGradientBoosting** ~72% accuracy (metadata-only, no leakage fix)
+- **SBERT-enhanced XGBoost** ~71% accuracy (metadata + 384-D MiniLM, no leakage fix)
 
 ---
 
 ## Results
 
-| Model | Accuracy | Precision | Recall | Notes |
-|-------|----------|-----------|--------|-------|
-| Article (SGD + TF-IDF) | ~97% | ~0.97 | ~0.97 | Strong on long-form text |
-| Social (SBERT + XGBoost) | varies | — | — | Suspected data leakage |
+| Model | Accuracy | ROC AUC | F1 | Notes |
+|-------|----------|---------|----|-------|
+| **Article (SGD + TF-IDF)** | **~97%** | — | ~0.97 | Strong on long-form text |
+| **Social (XGBoost + MPNet)** | **~81%** | **~0.89** | ~0.81 | Leak-free, recommended |
+| Social (metadata-only XGBoost) | ~61% AUC | ~0.61 | — | Embeddings are critical |
+| Social (legacy HGB, archived) | ~72% | ~0.80 | ~0.72 | Old model, data leakage |
+| Social (legacy SBERT, archived) | varies | — | — | Old model, data leakage |
 
 ---
 
@@ -142,13 +160,19 @@ Fake-News-Detector/
 ├── app/
 │   └── index.html        # Single-page frontend (Vanilla JS)
 ├── model/
-│   ├── model.ipynb               # Article model training notebook
-│   ├── news_analysis.ipynb       # Alternate article exploration
-│   ├── model.joblib              # Trained article model pipeline
-│   ├── social_model.joblib       # Traditional social model
-│   ├── social_model_sbert.joblib # SBERT-enhanced social model
-│   ├── fake_article.txt          # Test sample (fake)
-│   └── real_article.txt          # Test sample (real)
+│   ├── model.ipynb                       # Article model training notebook
+│   ├── news_analysis.ipynb               # Alternate article exploration
+│   ├── model.joblib                      # Trained article model pipeline
+│   ├── social_model.joblib               # Social model: XGBoost + MPNet (recommended)
+│   ├── social_model_base.joblib          # Social baseline: XGBoost (metadata only)
+│   ├── social_model_columns.joblib       # Feature column order
+│   ├── social_model_card.joblib          # Model metadata (params, CV results)
+│   ├── social_training.ipynb             # Social model training (with leakage fix)
+│   ├── old models/                       # Archived legacy models
+│   │   ├── social_model.joblib           #   Old HistGradientBoosting
+│   │   └── social_model_sbert.joblib     #   Old SBERT-enhanced
+│   ├── fake_article.txt                  # Test sample (fake)
+│   └── real_article.txt                  # Test sample (real)
 ├── eda/                          # Exploratory data analysis notebooks
 │   ├── social.ipynb              # Social model EDA + training
 │   ├── social2.ipynb             # SBERT-enhanced social model training
@@ -175,11 +199,17 @@ vercel --prod
 
 The project uses Vercel's Python serverless runtime (`@vercel/python`) for the API and static file serving (`@vercel/static`) for the frontend. Routes are defined in `vercel.json`.
 
-### Environment Variables (for SBERT)
+### Environment Variables (for MPNet / SBERT embeddings)
 Set a Hugging Face API token in Vercel:
 ```bash
 vercel env add HF_TOKEN
 ```
+
+The social model dispatches on `model_type`:
+- `"xgboost"` (default) — 46 metadata + 768-D MPNet embeddings
+- `"xgboost_base"` — metadata only (no embeddings)
+- `"sbert"` — legacy MiniLM-based model (archived)
+- `"traditional"` — legacy HistGradientBoosting (archived)
 
 ---
 

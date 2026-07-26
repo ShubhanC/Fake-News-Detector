@@ -233,8 +233,9 @@
     resultBox.className = `result ${isFake ? "fake" : "real"}`;
 
     // Model badge
+    const badge = isSocial ? "🐦 Tweet analysis" : "📰 Article analysis";
     document.getElementById("modelBadge").textContent =
-      isSocial ? "🐦 Tweet analysis" : "📰 Article analysis";
+      data.model_name ? `${badge} — ${data.model_name}` : badge;
 
     // Verdict + confidence
     document.getElementById("resultLabel").textContent =
