@@ -1,6 +1,11 @@
 {
   "version": 2,
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "build": {
+    "env": {
+      "XGBOOST_BUILD_SKIP_CUDA": "1"
+    }
+  },
   "builds": [
     { "src": "api/article.py", "use": "@vercel/python" },
     { "src": "api/social.py",  "use": "@vercel/python" },
