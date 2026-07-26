@@ -15,7 +15,7 @@ A serverless web application that uses machine learning to classify news article
 Misinformation spreads rapidly across the web — from fabricated news articles to misleading social media posts. Automated detection tools are needed to help users assess the credibility of content before sharing it. This project tackles that challenge with two specialized machine learning models:
 
 1. **Article model** — classifies long-form news articles using TF-IDF text features
-2. **Social model** — classifies tweets using handcrafted linguistic and engagement features (with an optional SBERT-enhanced variant)
+2. **Social model** — classifies tweets using handcrafted linguistic features, sentence embeddings, and XGBoost
 
 ---
 
@@ -38,13 +38,13 @@ User ──→ Browser (app/index.html)
    → BeautifulSoup)    Twitter syndication API)
         │                    │
         ▼                    ▼
-  TF-IDF vectorizer     Feature engineering
-  (max_features=10k,    (NER %, lexical stats,
-   ngram=(1,2))          engagement metrics)
+  TF-IDF vectorizer     Feature engineering + MPNet embeddings
+  (max_features=10k,    (NER %, lexical stats, engagement metrics,
+   ngram=(1,2))          768-d sentence embeddings via HF API)
         │                    │
         ▼                    ▼
-  SGDClassifier         HistGradientBoosting
-  (loss='hinge')        (or XGBoost + SBERT)
+  SGDClassifier         XGBoost
+  (loss='hinge')
 ```
 
 ### How it works
@@ -55,8 +55,7 @@ User ──→ Browser (app/index.html)
    - All other URLs → article model
    - Raw text → article model
 3. **Article model**: scrapes the URL with BeautifulSoup, extracts article text, vectorizes with TF-IDF, and classifies with SGDClassifier
-4. **Social model**: scrapes the tweet via Twitter's public syndication API, computes 52 features (NER percentages, lexical stats, engagement metrics), and classifies with HistGradientBoosting
-5. **SBERT variant**: also calls Hugging Face Inference API for `all-MiniLM-L6-v2` embeddings (384-D), concatenates with traditional features, and classifies with XGBoost
+4. **Social model**: scrapes the tweet via Twitter's public syndication API, computes 46 handcrafted features (NER percentages, lexical stats, engagement metrics), fetches 768-d MPNet embeddings via Hugging Face Inference API, and classifies with XGBoost
 
 ---
 
@@ -92,21 +91,13 @@ User ──→ Browser (app/index.html)
 | **Test ROC AUC** | ~0.61 |
 | **Note** | Embeddings provide the vast majority of signal; metadata alone barely beats random |
 
-### Legacy Models (Archived in `model/old models/`)
-- **HistGradientBoosting** ~72% accuracy (metadata-only, no leakage fix)
-- **SBERT-enhanced XGBoost** ~71% accuracy (metadata + 384-D MiniLM, no leakage fix)
-
----
-
-## Results
+### Social Model (Metadata-only Baseline)
 
 | Model | Accuracy | ROC AUC | F1 | Notes |
 |-------|----------|---------|----|-------|
 | **Article (SGD + TF-IDF)** | **~97%** | — | ~0.97 | Strong on long-form text |
 | **Social (XGBoost + MPNet)** | **~81%** | **~0.89** | ~0.81 | Leak-free, recommended |
-| Social (metadata-only XGBoost) | ~61% AUC | ~0.61 | — | Embeddings are critical |
-| Social (legacy HGB, archived) | ~72% | ~0.80 | ~0.72 | Old model, data leakage |
-| Social (legacy SBERT, archived) | varies | — | — | Old model, data leakage |
+| Social (metadata-only XGBoost) | — | ~0.61 | — | Embeddings provide most of the signal |
 
 ---
 
@@ -161,26 +152,16 @@ Fake-News-Detector/
 │   └── index.html        # Single-page frontend (Vanilla JS)
 ├── model/
 │   ├── model.ipynb                       # Article model training notebook
-│   ├── news_analysis.ipynb               # Alternate article exploration
 │   ├── model.joblib                      # Trained article model pipeline
 │   ├── social_model.joblib               # Social model: XGBoost + MPNet (recommended)
 │   ├── social_model_base.joblib          # Social baseline: XGBoost (metadata only)
 │   ├── social_model_columns.joblib       # Feature column order
 │   ├── social_model_card.joblib          # Model metadata (params, CV results)
-│   ├── social_training.ipynb             # Social model training (with leakage fix)
-│   ├── old models/                       # Archived legacy models
-│   │   ├── social_model.joblib           #   Old HistGradientBoosting
-│   │   └── social_model_sbert.joblib     #   Old SBERT-enhanced
-│   ├── fake_article.txt                  # Test sample (fake)
+│   ├── social_training.ipynb             # Social model training pipeline
+│   ├── news_analysis.ipynb               # Article model exploration
+│   ├── fake_article.txt                # Test sample (fake)
 │   └── real_article.txt                  # Test sample (real)
-├── eda/                          # Exploratory data analysis notebooks
-│   ├── social.ipynb              # Social model EDA + training
-│   ├── social2.ipynb             # SBERT-enhanced social model training
-│   ├── eda.ipynb                 # General EDA
-│   ├── tweet.ipynb               # Twitter API experiments
-│   ├── liar_dataset.ipynb        # LIAR dataset analysis
-│   ├── analysis_2.ipynb          # Further analysis
-│   └── video.ipynb               # Video data exploration
+├── eda/                                  # Exploratory data analysis notebooks
 ├── data_sources.md               # Dataset citations
 ├── vercel.json                   # Vercel deployment routes
 ├── pyproject.toml                # Pixi project config
@@ -199,7 +180,7 @@ vercel --prod
 
 The project uses Vercel's Python serverless runtime (`@vercel/python`) for the API and static file serving (`@vercel/static`) for the frontend. Routes are defined in `vercel.json`.
 
-### Environment Variables (for MPNet / SBERT embeddings)
+### Environment Variables (for MPNet embeddings)
 Set a Hugging Face API token in Vercel:
 ```bash
 vercel env add HF_TOKEN
@@ -208,8 +189,6 @@ vercel env add HF_TOKEN
 The social model dispatches on `model_type`:
 - `"xgboost"` (default) — 46 metadata + 768-D MPNet embeddings
 - `"xgboost_base"` — metadata only (no embeddings)
-- `"sbert"` — legacy MiniLM-based model (archived)
-- `"traditional"` — legacy HistGradientBoosting (archived)
 
 ---
 
