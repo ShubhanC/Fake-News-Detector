@@ -3,7 +3,8 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "build": {
     "env": {
-      "XGBOOST_BUILD_SKIP_CUDA": "1"
+      "XGBOOST_BUILD_SKIP_CUDA": "1",
+      "PIP_ONLY_BINARY": ":all:"
     }
   },
   "builds": [
